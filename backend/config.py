@@ -1,10 +1,8 @@
 import os
 from datetime import timedelta
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
-
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 
 def _resolve_database_uri():
@@ -19,10 +17,16 @@ def _resolve_database_uri():
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+pg8000://", 1)
 
-    # pg8000 doesn't understand "channel_binding" (Neon adds it by default);
-    # drop it while leaving "sslmode", which SQLAlchemy translates for pg8000.
+    # pg8000 doesn't accept "sslmode" or "channel_binding" as connection
+    # kwargs (psycopg2-specific params baked into most Postgres providers'
+    # connection strings) — strip them. pg8000 negotiates SSL automatically
+    # by default when the server supports it (which Neon requires), so no
+    # replacement flag is needed.
     parts = urlsplit(url)
-    query_pairs = [(k, v) for k, v in parse_qsl(parts.query) if k != "channel_binding"]
+    query_pairs = [
+        (k, v) for k, v in parse_qsl(parts.query)
+        if k not in ("channel_binding", "sslmode")
+    ]
     url = urlunsplit(parts._replace(query=urlencode(query_pairs)))
 
     return url
